@@ -1,51 +1,48 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Send, Bot, User, Sparkles } from 'lucide-react';
-
-interface Message {
-  id: number;
-  text: string;
-  sender: 'user' | 'ai';
-  timestamp: Date;
-}
+import { Send, Bot, User } from 'lucide-react';
+import { sendChatMessage, sendChatMessageStream, ChatMessage } from '../backend/chatService';
+import ReactMarkdown from 'react-markdown';
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: 1,
-      text: "Hello! I'm your AI memory assistant. I can help you search through your transcriptions, create summaries, and answer questions about your stored knowledge. What would you like to explore?",
-      sender: 'ai',
-      timestamp: new Date()
+      role: 'assistant',
+      content: "Hello! I'm your AI memory assistant. I can help you search through your transcriptions, create summaries, and answer questions about your stored knowledge. What would you like to explore?"
     }
   ]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [streamedContent, setStreamedContent] = useState('');
 
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
-
-    const userMessage: Message = {
-      id: messages.length + 1,
-      text: inputText,
-      sender: 'user',
-      timestamp: new Date()
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: inputText.trim(),
     };
-
-    setMessages(prev => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInputText('');
     setIsTyping(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage: Message = {
-        id: messages.length + 2,
-        text: "I understand you're looking for information. Based on your stored transcriptions and summaries, I can help you find relevant insights. Would you like me to search through your recent meetings or help you create a new summary?",
-        sender: 'ai',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, aiMessage]);
-      setIsTyping(false);
-    }, 2000);
+    setStreamedContent('');
+    try {
+      // Use streaming for typing effect
+      let fullResponse = '';
+      await sendChatMessageStream(
+        newMessages,
+        'llama3.1:8b',
+        (token) => {
+          fullResponse += token;
+          setStreamedContent(fullResponse);
+        }
+      );
+      setMessages([...newMessages, { role: 'assistant', content: fullResponse }]);
+    } catch (err: any) {
+      setMessages([...newMessages, { role: 'assistant', content: 'Sorry, there was an error.' }]);
+    }
+    setIsTyping(false);
+    setStreamedContent('');
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -69,7 +66,7 @@ export default function ChatPage() {
             AI Memory Assistant
           </h1>
           <p className="text-xl text-white/60">
-            Ask questions about your stored knowledge
+            Ask questions about your stored knowledge or anything else
           </p>
         </div>
       </motion.div>
@@ -78,57 +75,74 @@ export default function ChatPage() {
       <div className="flex-1 px-6 pb-32">
         <div className="max-w-4xl mx-auto">
           <div className="space-y-6">
-            {messages.map((message) => (
+            {messages.map((message, idx) => (
               <motion.div
-                key={message.id}
-                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                key={idx}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
               >
-                <div className={`flex items-start space-x-3 max-w-2xl ${message.sender === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                <div className={`flex items-start space-x-3 max-w-2xl ${message.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    message.sender === 'user' 
+                    message.role === 'user' 
                       ? 'bg-gradient-to-r from-cyan-500 to-blue-500' 
                       : 'bg-gradient-to-r from-purple-500 to-pink-500'
                   }`}>
-                    {message.sender === 'user' ? <User size={20} /> : <Bot size={20} />}
+                    {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
                   </div>
-                  
                   <div className={`px-6 py-4 rounded-2xl ${
-                    message.sender === 'user'
+                    message.role === 'user'
                       ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30'
                       : 'bg-black/30 backdrop-blur-xl border border-white/10'
                   }`}>
-                    <p className="text-white leading-relaxed">{message.text}</p>
-                    <p className="text-white/40 text-xs mt-2">
-                      {message.timestamp.toLocaleTimeString()}
-                    </p>
+                    {message.role === 'assistant' ? (
+                      <ReactMarkdown
+                        components={{
+                          p: ({node, ...props}) => <p {...props} className="text-white leading-relaxed whitespace-pre-line" />,
+                          li: ({node, ...props}) => <li {...props} className="text-white leading-relaxed whitespace-pre-line ml-6 list-disc" />,
+                          ul: ({node, ...props}) => <ul {...props} className="mb-2" />,
+                          strong: ({node, ...props}) => <strong {...props} className="font-bold text-white" />,
+                          em: ({node, ...props}) => <em {...props} className="italic text-white" />,
+                        }}
+                      >
+                        {message.content}
+                      </ReactMarkdown>
+                    ) : (
+                      <p className="text-white leading-relaxed whitespace-pre-line">{message.content}</p>
+                    )}
                   </div>
                 </div>
               </motion.div>
             ))}
 
-            {isTyping && (
-              <motion.div
-                className="flex justify-start"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <div className="flex items-start space-x-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Bot size={20} />
-                  </div>
-                  <div className="px-6 py-4 bg-black/30 backdrop-blur-xl border border-white/10 rounded-2xl">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+           {/* Streaming/typing effect for AI response */}
+           {isTyping && (
+             <motion.div
+               className="flex justify-start"
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+             >
+               <div className="flex items-start space-x-3">
+                 <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center">
+                   <Bot size={20} />
+                 </div>
+                 <div className="px-6 py-4 bg-black/30 backdrop-blur-xl border border-white/10 rounded-2xl">
+                   <ReactMarkdown
+                     components={{
+                       p: ({node, ...props}) => <p {...props} className="text-white leading-relaxed whitespace-pre-line" />,
+                       li: ({node, ...props}) => <li {...props} className="text-white leading-relaxed whitespace-pre-line ml-6 list-disc" />,
+                       ul: ({node, ...props}) => <ul {...props} className="mb-2" />,
+                       strong: ({node, ...props}) => <strong {...props} className="font-bold text-white" />,
+                       em: ({node, ...props}) => <em {...props} className="italic text-white" />,
+                     }}
+                   >
+                     {streamedContent || '...'}
+                   </ReactMarkdown>
+                 </div>
+               </div>
+             </motion.div>
+           )}
           </div>
         </div>
       </div>
@@ -148,9 +162,10 @@ export default function ChatPage() {
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Ask about your stored knowledge..."
+                  placeholder="Ask anything..."
                   className="w-full bg-transparent text-white placeholder-white/40 resize-none focus:outline-none max-h-32"
                   rows={1}
+                  disabled={isTyping}
                 />
               </div>
               <motion.button

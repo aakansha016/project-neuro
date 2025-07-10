@@ -76,16 +76,26 @@ export default function PremiumAudio() {
 
   const processAudio = async () => {
     if (!audioFile) return;
-    
     setIsProcessing(true);
     setTranscription('');
-    
-    setTimeout(() => {
-      setTranscription(
-        "This is a sophisticated transcription of your audio content. In a production environment, this would utilize advanced AI models like Whisper or similar speech-to-text services to provide accurate, contextual transcription with speaker identification and semantic understanding."
-      );
-      setIsProcessing(false);
-    }, 3000);
+    try {
+      const formData = new FormData();
+      formData.append('file', audioFile, 'audio.wav'); // field name fixed
+      const res = await fetch('http://localhost:5001/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.transcript) { // field name fixed
+        setTranscription(data.transcript);
+      } else {
+        setTranscription('No transcription received.');
+      }
+    } catch (err) {
+      setTranscription('Error transcribing audio.');
+      console.error(err);
+    }
+    setIsProcessing(false);
   };
 
   const formatTime = (seconds: number) => {

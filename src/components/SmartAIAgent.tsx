@@ -185,7 +185,7 @@ export default function SmartAIAgent() {
                 <div className="flex-1 bg-black/20 rounded-xl px-4 py-3 border border-white/10">
                   <p className="text-white/40 text-sm">Ask about your stored knowledge...</p>
                 </div>
-                <button className="p-3 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl">
+                <button className="p-3 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl" disabled>
                   <MessageSquare size={16} />
                 </button>
               </div>
